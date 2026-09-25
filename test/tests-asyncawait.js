@@ -3540,3 +3540,12 @@ testFail("async() => await (5) ** 6", "Unexpected token (1:21)", {ecmaVersion: 8
 testFail("4 + async() => 2", "Unexpected token (1:12)", {ecmaVersion: 8, loose: false})
 
 testFail("async function𝐬 f() {}", "Unexpected token (1:17)", {ecmaVersion: 8})
+
+testFail("async () => class { x = await 1 }", "Unexpected token (1:30)", {ecmaVersion: 2024})
+
+test("async () => class { x = async () => await 1 }", {}, {ecmaVersion: 2024})
+
+test("async () => class { x = await }", {}, {ecmaVersion: 2024})
+
+testFail("async () => class { x = await }", "Cannot use keyword 'await' outside an async function (1:24)",
+         {ecmaVersion: 2024, sourceType: "module"})
