@@ -1465,6 +1465,19 @@ test("async function f() { class C { aaa = await } }", {
 }, {ecmaVersion: 13})
 testFail("async function f() { class C { aaa = await } }", "Cannot use keyword 'await' outside an async function (1:37)", {ecmaVersion: 13, sourceType: "module"})
 
+// `await` expression in an enclosing async function does not apply inside
+// a field initializer (the initializer has its own function environment),
+// though an inner async function may still use it.
+testFail("async () => class { aaa = await 1 }", "Unexpected token (1:32)", {ecmaVersion: 13})
+testFail("async function f() { return class { aaa = await 1 } }", "Unexpected token (1:48)", {ecmaVersion: 13})
+testFail("async () => class { aaa = () => await 1 }", "Unexpected token (1:38)", {ecmaVersion: 13})
+test("async () => class { aaa = async () => await 1 }", {}, {ecmaVersion: 13})
+test("async function f() { return class { aaa = async function() { await 1 } } }", {}, {ecmaVersion: 13})
+// A static field initializer never belongs to an enclosing async function.
+testFail("async () => class { static aaa = await 1 }", "Cannot use await in class static initialization block (1:33)", {ecmaVersion: 13})
+testFail("async function f() { return class { static aaa = await } }", "Cannot use await in class static initialization block (1:49)", {ecmaVersion: 13})
+test("async function f() { return class { static aaa = async () => await 1 } }", {}, {ecmaVersion: 13})
+
 // `yield` is keyword in strict mode
 testFail("function* f() { class C { aaa = yield } }", "The keyword 'yield' is reserved (1:32)", {ecmaVersion: 13})
 
@@ -1560,6 +1573,21 @@ test("class C { aaa = function(){ arguments } }", {}, {ecmaVersion: 13})
 test("class C { [arguments] = 0 }", {}, {ecmaVersion: 13})
 testFail("class C { aaa = arguments }", "Cannot use 'arguments' in class field initializer (1:16)", {ecmaVersion: 13})
 testFail("class C { aaa = { arguments } }", "Cannot use 'arguments' in class field initializer (1:18)", {ecmaVersion: 13})
+// An arrow nested in an initializer keeps the initializer's (forbidden)
+// 'arguments', while a nested function gets its own binding.
+testFail("class C { aaa = () => arguments }", "Cannot use 'arguments' in class field initializer (1:22)", {ecmaVersion: 13})
+testFail("class C { aaa = () => () => arguments }", "Cannot use 'arguments' in class field initializer (1:28)", {ecmaVersion: 13})
+testFail("class C { aaa = (a = arguments) => a }", "Cannot use 'arguments' in class field initializer (1:21)", {ecmaVersion: 13})
+test("class C { aaa = function(){ return arguments } }", {}, {ecmaVersion: 13})
+testFail("class C { static aaa = () => arguments }", "Cannot use 'arguments' in class field initializer (1:29)", {ecmaVersion: 13})
+test("class C { static aaa = function(){ return arguments } }", {}, {ecmaVersion: 13})
+
+// new.target is available through any function nested in a field
+// initializer or static block
+test("class C { aaa = () => new.target }", {}, {ecmaVersion: 13})
+test("class C { aaa = function(){ return new.target } }", {}, {ecmaVersion: 13})
+test("class C { static aaa = function(){ return new.target } }", {}, {ecmaVersion: 13})
+test("class C { static { (function(){ return new.target })() } }", {}, {ecmaVersion: 13})
 
 //------------------------------------------------------------------------------
 // Private Class Field

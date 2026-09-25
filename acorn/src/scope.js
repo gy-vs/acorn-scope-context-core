@@ -1,5 +1,5 @@
 import {Parser} from "./state.js"
-import {SCOPE_VAR, SCOPE_FUNCTION, SCOPE_TOP, SCOPE_ARROW, SCOPE_SIMPLE_CATCH, BIND_LEXICAL, BIND_SIMPLE_CATCH, BIND_FUNCTION} from "./scopeflags.js"
+import {SCOPE_VAR, SCOPE_FUNCTION, SCOPE_TOP, SCOPE_ARROW, SCOPE_SIMPLE_CATCH, SCOPE_CLASS_STATIC_BLOCK, SCOPE_CLASS_FIELD_INIT, SCOPE_CLASS_STATIC_FIELD_INIT, BIND_LEXICAL, BIND_SIMPLE_CATCH, BIND_FUNCTION} from "./scopeflags.js"
 
 const pp = Parser.prototype
 
@@ -12,8 +12,6 @@ class Scope {
     this.lexical = []
     // A list of lexically-declared FunctionDeclaration names in the current lexical scope
     this.functions = []
-    // A switch to disallow the identifier reference 'arguments'
-    this.inClassFieldInit = false
   }
 }
 
@@ -94,4 +92,32 @@ pp.currentThisScope = function() {
     let scope = this.scopeStack[i]
     if (scope.flags & SCOPE_VAR && !(scope.flags & SCOPE_ARROW)) return scope
   }
+}
+
+// Class field initializers and class static blocks are parsed in their own
+// synthetic function environment, so a reference to 'arguments' is a
+// SyntaxError when one is found before a non-arrow function scope (whose
+// own 'arguments' binding shadows the outer one). Arrow functions are
+// transparent here, so an arrow nested in an initializer still resolves
+// 'arguments' to the enclosing (forbidden) context.
+pp.inClassFieldOrStaticBlock = function() {
+  for (let i = this.scopeStack.length - 1; i >= 0; i--) {
+    let {flags} = this.scopeStack[i]
+    if (flags & (SCOPE_CLASS_FIELD_INIT | SCOPE_CLASS_STATIC_FIELD_INIT | SCOPE_CLASS_STATIC_BLOCK)) return true
+    if (flags & SCOPE_VAR && !(flags & SCOPE_ARROW)) return false
+  }
+  return false
+}
+
+// Whether the current position is directly inside a class static element
+// (a static field initializer or a static block). Unlike with
+// 'arguments', nested function bodies escape the static-element 'await'
+// restriction, so any SCOPE_FUNCTION scope ends the walk.
+pp.inClassStaticElement = function() {
+  for (let i = this.scopeStack.length - 1; i >= 0; i--) {
+    let {flags} = this.scopeStack[i]
+    if (flags & (SCOPE_CLASS_STATIC_FIELD_INIT | SCOPE_CLASS_STATIC_BLOCK)) return true
+    if (flags & SCOPE_FUNCTION) return false
+  }
+  return false
 }

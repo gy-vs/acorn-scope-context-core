@@ -4,7 +4,7 @@ import {lineBreak, skipWhiteSpace} from "./whitespace.js"
 import {isIdentifierStart, isIdentifierChar, keywordRelationalOperator} from "./identifier.js"
 import {hasOwn, loneSurrogate} from "./util.js"
 import {DestructuringErrors} from "./parseutil.js"
-import {functionFlags, SCOPE_SIMPLE_CATCH, BIND_SIMPLE_CATCH, BIND_LEXICAL, BIND_VAR, BIND_FUNCTION, SCOPE_CLASS_STATIC_BLOCK, SCOPE_SUPER} from "./scopeflags.js"
+import {functionFlags, SCOPE_SIMPLE_CATCH, BIND_SIMPLE_CATCH, BIND_LEXICAL, BIND_VAR, BIND_FUNCTION, SCOPE_FUNCTION, SCOPE_SUPER, SCOPE_CLASS_STATIC_BLOCK, SCOPE_CLASS_FIELD_INIT, SCOPE_CLASS_STATIC_FIELD_INIT} from "./scopeflags.js"
 
 const pp = Parser.prototype
 
@@ -741,12 +741,19 @@ pp.parseClassField = function(field) {
   }
 
   if (this.eat(tt.eq)) {
-    // To raise SyntaxError if 'arguments' exists in the initializer.
-    const scope = this.currentThisScope()
-    const inClassFieldInit = scope.inClassFieldInit
-    scope.inClassFieldInit = true
+    // A field initializer is parsed as the body of a synthetic function
+    // scope that is never async or a generator, so 'await'/'yield'
+    // expressions don't inherit the class's enclosing function's async /
+    // generator status. It carries SCOPE_SUPER like a method so that
+    // 'this', 'super' and 'new.target' resolve there (also through nested
+    // functions, which share the class's new.target), while nested
+    // non-arrow functions establish their own 'this'/'super'. Static
+    // fields get a permanent static-element boundary so that 'await' never
+    // belongs to an enclosing async function there.
+    this.enterScope(SCOPE_FUNCTION | SCOPE_SUPER |
+                    (field.static ? SCOPE_CLASS_STATIC_FIELD_INIT : SCOPE_CLASS_FIELD_INIT))
     field.value = this.parseMaybeAssign()
-    scope.inClassFieldInit = inClassFieldInit
+    this.exitScope()
   } else {
     field.value = null
   }
